@@ -7,7 +7,8 @@
 
 ### Prerequisites
 - Python 3.10 or higher
-- pip (Python package installer)
+- asyncio
+- ollama
 
 ### Install Ollama
 
@@ -32,7 +33,7 @@ To run the program, follow these steps:
 
 3. Run the main script:
     ```bash
-    python main.py
+    python easy_response.py --question "Your question here"
     ```
 
 ## Model

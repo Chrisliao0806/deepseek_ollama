@@ -149,8 +149,8 @@ class RAG:
 
 
 if __name__ == "__main__":
-    setup_logging(log_level="INFO")
     args = parse_arguments()
+    setup_logging(log_level=args.log_level)
     logging.info("Parsed command-line arguments")
     rag = RAG(pdf_file=args.pdf_file)
     documents = rag.retrieve_qa(

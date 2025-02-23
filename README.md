@@ -36,6 +36,19 @@ To run the program, follow these steps:
     python easy_response.py --question "Your question here"
     ```
 
+### Using `--remove-think` Option
+The `--remove-think` option allows you to remove content between `<think>` and `</think>` tags from the model's response. This can be useful if you want to exclude the model's thought process from the output.
+
+Example without `--remove-think`:
+```bash
+python easy_response.py --question "Your question here"
+```
+
+Example with `--remove-think`:
+```bash
+python easy_response.py --question "Your question here" --remove-think True
+```
+
 ## Model
 This project uses the DeepSeek-R1 model from [Ollama](https://ollama.com/library/deepseek-r1). Ensure you have the model downloaded and properly configured in your environment.
 

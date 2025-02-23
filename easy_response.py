@@ -1,7 +1,7 @@
 import argparse
 import asyncio
 from utils.logger import setup_logging
-from utils.llm_usage import local_llm
+from utils.llm_usage import ollama_llm
 
 
 def parse_arguments():
@@ -24,6 +24,12 @@ def parse_arguments():
         type=str,
         help="The question to ask the model.",
     )
+    parser.add_argument(
+        "--remove-think",
+        default=False,
+        type=bool,
+        help="If True, removes content between <think> and </think> tags from the response. Defaults to False.",
+    )
     return parser.parse_args()
 
 
@@ -31,4 +37,4 @@ if __name__ == "__main__":
     args = parse_arguments()
     setup_logging("INFO")
 
-    print(asyncio.run(local_llm(content=args.question)))
+    print(asyncio.run(ollama_llm(question=args.question, remove_think=args.remove_think)))

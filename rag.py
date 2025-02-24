@@ -63,6 +63,12 @@ def parse_arguments():
         help="The question to ask the model.",
     )
     parser.add_argument(
+        "--db-save-dir",
+        default=None,
+        type=str,
+        help="The directory to save the vector database. eg. 'db'.",
+    )
+    parser.add_argument(
         "--remove-think",
         default=False,
         type=bool,
@@ -99,6 +105,7 @@ class RAG:
         self,
         model_path,
         query,
+        db=None,
         chunk_size=300,
         chunk_overlap=10,
         model_name="llama3",
@@ -136,11 +143,15 @@ class RAG:
         # Embed text
         embedding = OllamaEmbeddings(model=model_name, num_gpu=1)
         logging.info("Text embedding completed")
-
-        # Create Chroma vector database
-        vectordb = Chroma.from_documents(
-            documents=all_splits, embedding=embedding, persist_directory="db"
-        )
+        if db:
+            vectordb = Chroma(persist_directory=db, embedding_function=embedding)
+            logging.info("Loaded Chroma vector database")
+        else:
+            # Create Chroma vector database
+            vectordb = Chroma.from_documents(
+                documents=all_splits, embedding=embedding, persist_directory="db"
+            )
+            logging.info("Created Chroma vector database")
         retriever = vectordb.as_retriever()
         retriever_docs = retriever.invoke(query)
         logging.info("Document retrieval completed")
@@ -152,7 +163,7 @@ class RAG:
                 question=query,
                 context=formatted_content,
                 model_name=model_path,
-                remove_think=False,
+                remove_think=remove_think,
             )
         )
         logging.info("LLM query completed")
@@ -167,6 +178,7 @@ if __name__ == "__main__":
     documents = rag.retrieve_qa(
         model_path=args.model_path,
         query=args.question,
+        db=args.db_save_dir,
         chunk_size=args.chunk_size,
         chunk_overlap=args.chunk_overlap,
         model_name=args.model_name,

@@ -63,6 +63,12 @@ def parse_arguments():
         help="The question to ask the model.",
     )
     parser.add_argument(
+        "--remove-think",
+        default=False,
+        type=bool,
+        help="If True, removes content between <think> and </think> tags from the response. Defaults to False.",
+    )
+    parser.add_argument(
         "--log-level",
         default="INFO",
         type=str,
@@ -96,6 +102,7 @@ class RAG:
         chunk_size=300,
         chunk_overlap=10,
         model_name="llama3",
+        remove_think=False,
     ):
         """
         Creates a RetrievalQA chain using the provided model and vector database.
@@ -113,7 +120,11 @@ class RAG:
         logging.info("Starting retrieve_qa process")
         logging.debug(
             "Model path: %s, Query: %s, Chunk size: %d, Chunk overlap: %d, Model name: %s",
-            model_path, query, chunk_size, chunk_overlap, model_name
+            model_path,
+            query,
+            chunk_size,
+            chunk_overlap,
+            model_name,
         )
         # Split text
         text_splitter = RecursiveCharacterTextSplitter(
@@ -159,6 +170,7 @@ if __name__ == "__main__":
         chunk_size=args.chunk_size,
         chunk_overlap=args.chunk_overlap,
         model_name=args.model_name,
+        remove_think=args.remove_think,
     )
     logging.info("RAG process completed")
     print(documents)

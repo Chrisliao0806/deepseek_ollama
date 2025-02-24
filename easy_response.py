@@ -25,6 +25,12 @@ def parse_arguments():
         help="The question to ask the model.",
     )
     parser.add_argument(
+        "--model-path",
+        default="deepseek-r1:14b",
+        type=str,
+        help="The path to the DeepSeek-R1 model file.",
+    )
+    parser.add_argument(
         "--remove-think",
         default=False,
         type=bool,
@@ -37,4 +43,12 @@ if __name__ == "__main__":
     args = parse_arguments()
     setup_logging("INFO")
 
-    print(asyncio.run(ollama_llm(question=args.question, remove_think=args.remove_think)))
+    print(
+        asyncio.run(
+            ollama_llm(
+                question=args.question,
+                model_name=args.model_path,
+                remove_think=args.remove_think,
+            )
+        )
+    )

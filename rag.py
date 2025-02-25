@@ -18,12 +18,14 @@ def parse_arguments():
 
     Arguments:
         --pdf-file (str): The path to the PDF file. Default is "Chris_Resume.pdf".
-        --model-path (str): The path to the DeepSeek-R1 model file. Default is "/Users/liaopoyu/Downloads/llm_model/Mistral-Small-24B-Instruct-2501-Q4_K_M.gguf".
-        --chunk-size (int): The maximum size of each text chunk. Default is 100.
-        --chunk-overlap (int): The number of characters that overlap between chunks. Default is 5.
-        --model-name (str): The name of the model to use for embedding. Default is "sentence-transformers/all-MiniLM-L6-v2".
-        --gpu-usage (str): Additional keyword arguments to pass to the model, such as "cpu", "gpu". Defaults to "mps".
+        --model-path (str): The path to the DeepSeek-R1 model file. Default is "deepseek-r1:14b".
+        --chunk-size (int): The maximum size of each text chunk. Default is 300.
+        --chunk-overlap (int): The number of characters that overlap between chunks. Default is 10.
+        --model-name (str): The name of the model to use for embedding. Default is "llama3".
         --question (str): The question to ask the model. Default is "What engineer is him, and what did he do".
+        --db-save-dir (str): The directory to save the vector database. Default is None.
+        --remove-think (bool): If True, removes content between <think> and </think> tags from the response. Default is False.
+        --log-level (str): The logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL). Default is "INFO".
     """
     parser = argparse.ArgumentParser(description="RAG model for using langchain")
     parser.add_argument(

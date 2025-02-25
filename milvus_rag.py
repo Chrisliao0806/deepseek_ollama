@@ -1,4 +1,5 @@
 import re
+import asyncio
 import argparse
 import logging
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -92,12 +93,6 @@ def parse_arguments():
         help="The directory to save the vector database.",
     )
     parser.add_argument(
-        "--remove-think",
-        default=False,
-        type=bool,
-        help="If True, removes content between <think> and </think> tags from the response. Defaults to False.",
-    )
-    parser.add_argument(
         "--log-level",
         default="INFO",
         type=str,
@@ -116,13 +111,14 @@ class MilvusRag:
     Methods:
         __init__(pdf_file):
             Initializes the MilvusRag instance with a PDF file.
-        
+
         combine_docs(docs):
             Combines the content of multiple documents into a single string.
-        
+
         rag_search(model_path="deepseek-r1:14b", query="Chris在AIF的角色是什麼？", db="./milvus_example.db", chunk_size=300, chunk_overlap=10, model_name="sentence-transformers/all-MiniLM-L6-v2", remove_think=False):
             Performs a RAG search using the specified parameters and returns the response.
     """
+
     def __init__(self, pdf_file):
         logging.info("Initializing RAG with PDF file: %s", pdf_file)
         self.pdf_reader = PyMuPDFLoader(pdf_file).load()
@@ -148,7 +144,6 @@ class MilvusRag:
         chunk_size=300,
         chunk_overlap=10,
         model_name="sentence-transformers/all-MiniLM-L6-v2",
-        remove_think=False,
     ):
         """
         Perform a Retrieval-Augmented Generation (RAG) search using a specified model and query.
@@ -206,13 +201,12 @@ class MilvusRag:
         )
         logging.info("RAG chain created")
         # Invoke the RAG chain with a specific question and retrieve the response
-        res = rag_chain.invoke(query)
-        if remove_think:
-            # Remove content between <think> and </think> tags to remove thinking output
-            res = re.sub(
-                r"<think>.*?</think>", "", res, flags=re.DOTALL
-            ).strip()
-        print(res)
+
+        async def async_rag_search():
+            async for chunk in rag_chain.astream(query):
+                print(chunk, end="")
+
+        asyncio.run(async_rag_search())
 
 
 if __name__ == "__main__":
@@ -227,6 +221,5 @@ if __name__ == "__main__":
         chunk_size=args.chunk_size,
         chunk_overlap=args.chunk_overlap,
         model_path=args.model_path,
-        remove_think=args.remove_think,
     )
     logging.info("RAG process completed")

@@ -31,13 +31,16 @@ To run the program, follow these steps:
     pip install -r requirements.txt
     ```
 
-3. Run the main script:
-    ```bash
-    python easy_response.py --question "Your question here"
-    ```
+### Running `easy_response.py`
+This script allows you to ask a question to the DeepSeek-R1 model.
 
-### Using `--remove-think` Option
-The `--remove-think` option allows you to remove content between `<think>` and `</think>` tags from the model's response. This can be useful if you want to exclude the model's thought process from the output.
+Example:
+```bash
+python easy_response.py --question "Your question here"
+```
+
+Using `--remove-think` Option:
+The `--remove-think` option allows you to remove content between `<think>` and `</think>` tags from the model's response.
 
 Example without `--remove-think`:
 ```bash
@@ -47,6 +50,22 @@ python easy_response.py --question "Your question here"
 Example with `--remove-think`:
 ```bash
 python easy_response.py --question "Your question here" --remove-think True
+```
+
+### Running `milvus_rag.py`
+This script performs Retrieval-Augmented Generation (RAG) using Milvus for vector storage and retrieval.
+
+Example:
+```bash
+python milvus_rag.py --pdf-file "path/to/your.pdf" --question "Your question here"
+```
+
+### Running `rag.py`
+This script reads PDF files and creates a RetrievalQA chain.
+
+Example:
+```bash
+python rag.py --pdf-file "path/to/your.pdf" --question "Your question here"
 ```
 
 ## Model

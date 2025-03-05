@@ -68,6 +68,14 @@ Example:
 python rag.py --pdf-file "path/to/your.pdf" --question "Your question here"
 ```
 
+### Running `adapative_rag.py`
+This script implements a retrieval-augmented generation (RAG) system for processing and answering questions based on a given PDF document.
+
+Example:
+```bash
+python adapative_rag.py --pdf-file "path/to/your.pdf" --question "Your question here"
+```
+
 ## Model
 This project uses the DeepSeek-R1 model from [Ollama](https://ollama.com/library/deepseek-r1). Ensure you have the model downloaded and properly configured in your environment.
 

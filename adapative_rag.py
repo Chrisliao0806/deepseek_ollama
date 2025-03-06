@@ -1,4 +1,5 @@
 """Langgraph adaptive RAG system."""
+
 import argparse
 import logging
 from typing import List
@@ -15,6 +16,7 @@ from langgraph.graph import END, START, StateGraph
 from typing_extensions import TypedDict
 
 from utils.logger import setup_logging
+from langchain.callbacks import get_openai_callback
 
 # Prompt Template for RAG
 INSTRUCTIONRAG = """
@@ -42,7 +44,7 @@ def parse_arguments():
         --model-path (str): The path to the ollama file. Default is "qwen2.5:7b".
         --chunk-size (int): The maximum size of each text chunk. Default is 300.
         --chunk-overlap (int): The number of characters that overlap between chunks. Default is 10.
-        --model-name (str): The name of the model to use for embedding. 
+        --model-name (str): The name of the model to use for embedding.
                             Default is "sentence-transformers/all-MiniLM-L6-v2".
         --log-level (str): The logging level. Default is "INFO".
         --question (str): The question to ask the model. Default is "可以幫我看一下po yu liao的職業嗎".
@@ -118,7 +120,7 @@ class GraphState(TypedDict):
 
 class AdaptiveRag:
     """
-    AdaptiveRag is a class that implements a retrieval-augmented generation (RAG) system for processing and answering questions 
+    AdaptiveRag is a class that implements a retrieval-augmented generation (RAG) system for processing and answering questions
     based on a given PDF document. It uses a combination of document embedding, text splitting, and a language model to generate responses.
     Attributes:
         model_name (str): The name of the model used for embeddings.
@@ -131,6 +133,7 @@ class AdaptiveRag:
         vectordb (Chroma): The vector database for storing document embeddings.
         retriever (Retriever): The retriever object for searching relevant documents.
     """
+
     def __init__(
         self,
         pdf_file: str,
@@ -217,10 +220,10 @@ class AdaptiveRag:
 
         Returns:
             dict: A dictionary containing:
-                - "documents" (list): A list of tuples where each tuple 
+                - "documents" (list): A list of tuples where each tuple
                                       contains a document and its relevance score.
                 - "question" (str): The original question from the state.
-                - "use_rag" (bool): A flag indicating whether the relevance score 
+                - "use_rag" (bool): A flag indicating whether the relevance score
                                     of any document exceeds the threshold (0.3).
         """
 
@@ -241,7 +244,7 @@ class AdaptiveRag:
         Determines the retrieval route based on the state configuration.
 
         Args:
-            state (dict): A dictionary containing the state configuration. 
+            state (dict): A dictionary containing the state configuration.
                           It must include a key "use_rag" with a boolean value.
 
         Returns:
@@ -269,7 +272,7 @@ class AdaptiveRag:
                 - "documents" (list): A list of documents to be used for generating the response.
 
         Returns:
-            dict: A dictionary containing the original question, 
+            dict: A dictionary containing the original question,
                   documents, and the generated response.
                 - "question" (str): The original question.
                 - "documents" (list): The original list of documents.
@@ -307,14 +310,14 @@ class AdaptiveRag:
 
         This method initializes a StateGraph with nodes for different processing steps
         (RAG generation, plain answer generation, and retrieval). It defines the edges
-        and conditional transitions between these nodes, compiles the workflow, and 
+        and conditional transitions between these nodes, compiles the workflow, and
         invokes it with the provided question.
 
         Args:
             question (str): The question to be processed by the workflow.
 
         Returns:
-            tuple: A tuple containing the compiled workflow and the result of invoking 
+            tuple: A tuple containing the compiled workflow and the result of invoking
                    the workflow with the given question.
         """
         workflow = StateGraph(GraphState)
@@ -335,6 +338,12 @@ class AdaptiveRag:
 
         # Compile
         compiled_app = workflow.compile()
+        with get_openai_callback() as cb:
+             output = compiled_app.invoke({"question": question})
+             print(f"Total Tokens: {cb.total_tokens}")
+             print(f"input_tokens: {cb.prompt_tokens}")
+             print(f"output_tokens: {cb.completion_tokens}")
+
 
         return compiled_app, compiled_app.invoke({"question": question})
 

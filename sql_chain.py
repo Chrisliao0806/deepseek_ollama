@@ -186,6 +186,7 @@ class SqlRetrieve:
         Returns:
             None
         """
+        token = []
         graph_builder = StateGraph(State).add_sequence(
             [self.write_query, self.execute_query, self.generate_answer]
         )
@@ -200,6 +201,11 @@ class SqlRetrieve:
                 print(f"Total Tokens: {cb.total_tokens}")
                 print(f"input_tokens: {cb.prompt_tokens}")
                 print(f"output_tokens: {cb.completion_tokens}")
+            token.append(cb.total_tokens)
+            token.append(cb.prompt_tokens)
+            token.append(cb.completion_tokens)
+            
+        return step['generate_answer']['answer'], token
 
 
 if __name__ == "__main__":
@@ -210,5 +216,7 @@ if __name__ == "__main__":
         db_uri=args.db_uri,
         model=args.model,
     )
-    sql_retrieve.workflow(query=args.question)
+    output_answer, token_output = sql_retrieve.workflow(query=args.question)
+    print(output_answer)
+    print(token_output)
     logging.info("SQL process completed")

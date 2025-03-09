@@ -1,8 +1,9 @@
 """Langgraph adaptive RAG system."""
-
+import os
 import argparse
 import logging
 from typing import List
+from dotenv import load_dotenv
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyMuPDFLoader
@@ -13,10 +14,23 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables.graph import MermaidDrawMethod
 from langchain_ollama import ChatOllama
 from langgraph.graph import END, START, StateGraph
+from langchain_community.tools.tavily_search import TavilySearchResults
+from langchain_core.pydantic_v1 import BaseModel, Field
 from typing_extensions import TypedDict
 
 from utils.logger import setup_logging
 from langchain.callbacks import get_openai_callback
+
+
+load_dotenv()
+os.environ['TAVILY_API_KEY'] = os.getenv('TAVILY_API_KEY')
+
+# 定義兩個工具的 DataModel
+class web_search(BaseModel):
+    """
+    網路搜尋工具。若問題覺得需要用網路查詢，則使用web_search工具搜尋解答。
+    """
+    query: str = Field(description="使用網路搜尋時輸入的問題")
 
 # Prompt Template for RAG
 INSTRUCTIONRAG = """
@@ -31,6 +45,11 @@ INSTRUCTIONPLAIN = """
 回應問題時請確保答案的準確性，勿虛構答案。
 """
 
+# Prompt Template for WEB
+INSTRUCTIONWEB = """
+你是將使用者問題導向自己回覆或是網路搜尋的專家。
+如果問題你認為需要用網路搜尋會比較好的則使用web_search工具
+"""
 
 def parse_arguments():
     """
@@ -148,7 +167,8 @@ class AdaptiveRag:
         self.pdf_reader = PyMuPDFLoader(pdf_file).load()
         self.document_embedding()
         self.llm = ChatOllama(model=model_path, base_url="http://localhost:11434")
-        self.rag_chain, self.llm_chain = self._init_model()
+        self.rag_chain, self.llm_chain, self.question_router = self._init_model()
+        self.web_search_tool = TavilySearchResults(include_answer=True,)
 
     def _init_model(self):
         prompt_rag = ChatPromptTemplate.from_messages(
@@ -165,11 +185,22 @@ class AdaptiveRag:
                 ("human", "問題: {question}"),
             ]
         )
+        route_prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system",INSTRUCTIONWEB),
+                ("human", "{question}"),
+            ]
+        )
+
         # LLM & chain
         rag_chain = prompt_rag | self.llm | StrOutputParser()
         # LLM & chain
         llm_chain = prompt_plain | self.llm | StrOutputParser()
-        return rag_chain, llm_chain
+        # Route LLM with tools use
+        structured_llm_router = self.llm.bind_tools(tools=[web_search])
+        question_router = route_prompt | structured_llm_router
+        
+        return rag_chain, llm_chain, question_router
 
     def document_embedding(self):
         """
@@ -209,7 +240,7 @@ class AdaptiveRag:
             collection_name="coll2",
             collection_metadata={"hnsw:space": "cosine"},
         )
-        self.retriever = self.vectordb.as_retriever(search_kwargs={"k": 3})
+        #self.retriever = self.vectordb.as_retriever(search_kwargs={"k": 3})
 
     def retrieve(self, state):
         """
@@ -238,6 +269,30 @@ class AdaptiveRag:
             if score > 0.3:
                 return {"documents": documents, "question": question, "use_rag": True}
         return {"documents": documents, "question": question, "use_rag": False}
+    
+    ### Edges ###
+    def route_web_test(self, state):
+        """
+        Route question to web search or RAG.
+
+        Args:
+            state (dict): The current graph state
+
+        Returns:
+            str: Next node to call
+        """
+
+        print("---ROUTE QUESTION---")
+        question = state["question"]
+        source = self.question_router.invoke({"question": question})
+        
+        if len(source.tool_calls) == 0:
+            print("  -ROUTE TO PLAIN LLM-")
+            return "plain_feedback"
+        
+        else:
+            print("  -ROUTE TO WEB SEARCH-")
+            return "web_search"
 
     def route_retrieve(self, state):
         """
@@ -258,6 +313,25 @@ class AdaptiveRag:
         else:
             print("  -ROUTE TO PLAIN FEEDBACK-")
             return "plain_answer"
+        
+    def web_generate(self, state):
+        """
+        Generates a response using web search.
+
+        Args:
+            state (dict): The current graph state
+
+        Returns:
+            state (dict): New key added to state, generation, that contains web search generation
+        """
+        print("---WEB GENERATE---")
+        question = state["question"]
+        documents = self.web_search_tool.invoke({"query": question})
+        # RAG generation
+        generation = self.rag_chain.invoke(
+            {"documents": documents, "question": question}
+        )
+        return {"documents": documents, "question": question, "generation": generation}
 
     def rag_generate(self, state):
         """
@@ -287,6 +361,19 @@ class AdaptiveRag:
             {"documents": documents, "question": question}
         )
         return {"documents": documents, "question": question, "generation": generation}
+    
+    def first_stage_end(self, state):
+        """
+        End of the first stage.
+
+        Args:
+            state (dict): The current graph state
+
+        Returns:
+            str: Next node to call
+        """
+        print("---FIRST STAGE END---")
+        return {"question": state["question"]}
 
     def plain_answer(self, state):
         """
@@ -326,26 +413,35 @@ class AdaptiveRag:
         workflow.add_node("rag_generate", self.rag_generate)  # rag
         workflow.add_node("plain_answer", self.plain_answer)  # llm
         workflow.add_node("retrieve", self.retrieve)  # retrieve
+        workflow.add_node("web_search", self.web_generate)  # web search
+        workflow.add_node("first_stage_end", self.first_stage_end)  # end of first stage
 
         workflow.add_edge(START, "retrieve")
         workflow.add_conditional_edges(
             "retrieve",
             self.route_retrieve,
-            {"rag_generate": "rag_generate", "plain_answer": "plain_answer"},
+            {"rag_generate": "rag_generate", "plain_answer": "first_stage_end"},
+        )
+        workflow.add_conditional_edges(
+            "first_stage_end",
+            self.route_web_test,
+            {"web_search": "web_search", "plain_feedback": "plain_answer"},
         )
         workflow.add_edge("rag_generate", END)
+        workflow.add_edge("web_search", END)
         workflow.add_edge("plain_answer", END)
 
         # Compile
         compiled_app = workflow.compile()
         with get_openai_callback() as cb:
              output = compiled_app.invoke({"question": question})
+             print(output["generation"])
              print(f"Total Tokens: {cb.total_tokens}")
              print(f"input_tokens: {cb.prompt_tokens}")
              print(f"output_tokens: {cb.completion_tokens}")
 
 
-        return compiled_app, compiled_app.invoke({"question": question})
+        return compiled_app
 
 
 if __name__ == "__main__":
@@ -358,8 +454,7 @@ if __name__ == "__main__":
         model_path=args.model_path,
         model_name=args.model_name,
     )
-    app, output = adaptive_rag.workflow_setup(question=args.question)
-    print(output["generation"])
+    app = adaptive_rag.workflow_setup(question=args.question)
 
     if args.save_img:
         image_data = app.get_graph().draw_mermaid_png(

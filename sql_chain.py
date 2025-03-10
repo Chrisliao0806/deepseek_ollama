@@ -6,6 +6,7 @@ from typing_extensions import Annotated
 from langchain_ollama import ChatOllama
 from langchain_community.tools.sql_database.tool import QuerySQLDatabaseTool
 from langchain import hub
+from langchain_core.runnables.graph import MermaidDrawMethod
 from langchain_community.utilities import SQLDatabase
 from langgraph.graph import START, StateGraph
 from utils.logger import setup_logging
@@ -204,8 +205,8 @@ class SqlRetrieve:
             token.append(cb.total_tokens)
             token.append(cb.prompt_tokens)
             token.append(cb.completion_tokens)
-            
-        return step['generate_answer']['answer'], token
+
+        return step["generate_answer"]["answer"], token
 
 
 if __name__ == "__main__":

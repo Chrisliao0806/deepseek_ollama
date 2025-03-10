@@ -27,10 +27,25 @@ load_dotenv()
 os.environ["TAVILY_API_KEY"] = os.getenv("TAVILY_API_KEY")
 
 
-# 定義兩個工具的 DataModel
-class web_search(BaseModel):
+class RAGState(BaseModel):
     """
-    網路搜尋工具。若問題覺得需要用網路查詢，則使用web_search工具搜尋解答。
+    向量資料庫回覆工具。若問題可以從向量資料庫中找到答案，則使用RAG工具回覆。
+    """
+
+    query: str = Field(description="使用向量資料庫回覆時輸入的問題")
+
+
+class PlainState(BaseModel):
+    """
+    直接回覆工具。若問題從向量資料庫中找不到的話，則直接用自己的知識進行回覆
+    """
+
+    query: str = Field(description="使用直接回覆時輸入的問題")
+
+
+class WebState(BaseModel):
+    """
+    網路搜尋工具。若問題覺得需要用網路查詢，則使用WebState工具搜尋解答。
     """
 
     query: str = Field(description="使用網路搜尋時輸入的問題")
@@ -52,7 +67,22 @@ INSTRUCTIONPLAIN = """
 # Prompt Template for WEB
 INSTRUCTIONWEB = """
 你是將使用者問題導向自己回覆或是網路搜尋的專家。
-如果問題你認為需要用網路搜尋會比較好的則使用web_search工具
+如果問題你認為需要用網路搜尋會比較好的則使用WebState工具
+"""
+
+# Prompt Template for RAG
+INSTRUCTIONWEBRAG = """
+你是一位負責處理使用者問題的助手，請利用提取出來的網頁內容來回應問題。
+你必須從網頁內容提取出答案，並回答使用者的問題。
+注意：請確保答案的準確性。並且不能回答出跟網頁不一樣的資訊出來
+"""
+
+INSTRUCTIONRAGORPLAIN = """
+你是一位負責處理使用者問題的助手，使用者會輸入一個問題，然後上述會有一個文件的內容，\
+你的目標就是去確認這個問題是否可以從這個文件中找到答案。
+
+如果文件裡面的內容與使用者問題有關聯，請使用 RAGState 工具。
+如果文件裡面的內容與使用者問題完全無關，請使用 PlainState 工具。
 """
 
 
@@ -172,7 +202,13 @@ class AdaptiveRag:
         self.pdf_reader = PyMuPDFLoader(pdf_file).load()
         self.document_embedding()
         self.llm = ChatOllama(model=model_path, base_url="http://localhost:11434")
-        self.rag_chain, self.llm_chain, self.question_router = self._init_model()
+        (
+            self.rag_chain,
+            self.llm_chain,
+            self.web_chain,
+            self.question_router,
+            self.question_router_rag_or_plain,
+        ) = self._init_model()
         self.web_search_tool = TavilySearchResults(
             include_answer=True,
         )
@@ -192,10 +228,25 @@ class AdaptiveRag:
                 ("human", "問題: {question}"),
             ]
         )
+
+        prompt_web = ChatPromptTemplate.from_messages(
+            [
+                ("system", INSTRUCTIONWEBRAG),
+                ("human", "問題: {question}"),
+                ("system", "網頁內容: \n\n {documents}"),
+            ]
+        )
         route_prompt = ChatPromptTemplate.from_messages(
             [
                 ("system", INSTRUCTIONWEB),
                 ("human", "{question}"),
+            ]
+        )
+        route_prompt_rag_or_plain = ChatPromptTemplate.from_messages(
+            [
+                ("human", "{question}"),
+                ("system", "文件: \n\n {documents}"),
+                ("system", INSTRUCTIONRAGORPLAIN),
             ]
         )
 
@@ -203,11 +254,24 @@ class AdaptiveRag:
         rag_chain = prompt_rag | self.llm | StrOutputParser()
         # LLM & chain
         llm_chain = prompt_plain | self.llm | StrOutputParser()
+        # LLM & chain
+        web_chain = prompt_web | self.llm | StrOutputParser()
         # Route LLM with tools use
-        structured_llm_router = self.llm.bind_tools(tools=[web_search])
+        structured_llm_router = self.llm.bind_tools(tools=[WebState])
         question_router = route_prompt | structured_llm_router
+        # Route LLM with tools use
+        structured_rag_plain_router = self.llm.bind_tools(tools=[RAGState, PlainState])
+        question_router_rag_or_plain = (
+            route_prompt_rag_or_plain | structured_rag_plain_router
+        )
 
-        return rag_chain, llm_chain, question_router
+        return (
+            rag_chain,
+            llm_chain,
+            web_chain,
+            question_router,
+            question_router_rag_or_plain,
+        )
 
     def document_embedding(self):
         """
@@ -271,11 +335,38 @@ class AdaptiveRag:
         # Retrieval
         # 0.3 is the threshold for relevance score
         documents = self.vectordb.similarity_search_with_relevance_scores(question)
-        for res, score in documents:
-            print(f"* [SIM={score:3f}] {res.page_content} [{res.metadata}]")
-            if score > 0.3:
-                return {"documents": documents, "question": question, "use_rag": True}
+        print(documents)
         return {"documents": documents, "question": question, "use_rag": False}
+
+    ### Edges ###
+    def route_rag_plain_test(self, state):
+        """
+        Route question to web search or RAG.
+
+        Args:
+            state (dict): The current graph state
+
+        Returns:
+            str: Next node to call
+        """
+
+        print("---ROUTE QUESTION---")
+        question = state["question"]
+        documents = state["documents"]
+        source = self.question_router_rag_or_plain.invoke(
+            {"question": question, "documents": documents}
+        )
+
+        if len(source.tool_calls) == 0:
+            print("  -ROUTE TO PLAIN LLM-")
+            return "plain_feedback"
+
+        if source.tool_calls[0]["name"] == "RAGState":
+            print("  -ROUTE TO RAG-")
+            return "rag_generate"
+        else:
+            print("  -ROUTE TO PLAIN LLM-")
+            return "plain_feedback"
 
     ### Edges ###
     def route_web_test(self, state):
@@ -334,8 +425,10 @@ class AdaptiveRag:
         print("---WEB GENERATE---")
         question = state["question"]
         documents = self.web_search_tool.invoke({"query": question})
+        documents = [doc["content"] for doc in documents]
+        print(documents)
         # RAG generation
-        generation = self.rag_chain.invoke(
+        generation = self.web_chain.invoke(
             {"documents": documents, "question": question}
         )
         return {"documents": documents, "question": question, "generation": generation}
@@ -362,7 +455,6 @@ class AdaptiveRag:
         print("---GENERATE IN RAG MODE---")
         question = state["question"]
         documents = state["documents"]
-
         # RAG generation
         generation = self.rag_chain.invoke(
             {"documents": documents, "question": question}
@@ -426,8 +518,8 @@ class AdaptiveRag:
         workflow.add_edge(START, "retrieve")
         workflow.add_conditional_edges(
             "retrieve",
-            self.route_retrieve,
-            {"rag_generate": "rag_generate", "plain_answer": "first_stage_end"},
+            self.route_rag_plain_test,
+            {"rag_generate": "rag_generate", "plain_feedback": "first_stage_end"},
         )
         workflow.add_conditional_edges(
             "first_stage_end",

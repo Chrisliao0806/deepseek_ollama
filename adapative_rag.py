@@ -80,9 +80,10 @@ INSTRUCTIONWEBRAG = """
 INSTRUCTIONRAGORPLAIN = """
 你是一位負責處理使用者問題的助手，使用者會輸入一個問題，然後上述會有一個文件的內容，\
 你的目標就是去確認這個問題是否可以從這個文件中找到答案。
-
-如果文件裡面的內容與使用者問題有關聯，請使用 RAGState 工具。
-如果文件裡面的內容與使用者問題完全無關，請使用 PlainState 工具。
+你要能判斷問題本身，如：可以介紹這篇文章或是這篇文章有什麼特別的地方等等，這都算是RAGState工具的範疇。
+如果文件裡面的內容與使用者問題有關聯，就要使用 RAGState 工具。
+除非是問題完全無法從這個文件中找到答案，否則請使用RAGState工具。
+最後如果文件裡面的內容與使用者問題完全無關，請使用 PlainState 工具。
 """
 
 
@@ -244,8 +245,8 @@ class AdaptiveRag:
         )
         route_prompt_rag_or_plain = ChatPromptTemplate.from_messages(
             [
-                ("human", "{question}"),
                 ("system", "文件: \n\n {documents}"),
+                ("human", "{question}"),
                 ("system", INSTRUCTIONRAGORPLAIN),
             ]
         )

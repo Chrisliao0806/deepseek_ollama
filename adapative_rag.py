@@ -66,8 +66,11 @@ INSTRUCTIONPLAIN = """
 
 # Prompt Template for WEB
 INSTRUCTIONWEB = """
-你是將使用者問題導向自己回覆或是網路搜尋的專家。
-如果問題你認為需要用網路搜尋會比較好的則使用WebState工具
+你是一位負責處理使用者問題的助手，使用者會輸入一個問題，\
+你的目標是要去確認這個問題到底是在跟你聊天還是想要詢問你事情。
+
+如果使用者的問題就是純粹的聊天，則使用PlainState工具(只有聊天才用此工具)
+如果使用者的問題不是純粹的聊天，而是詢問你事情的話，則使用WebState工具
 """
 
 # Prompt Template for RAG
@@ -81,8 +84,8 @@ INSTRUCTIONRAGORPLAIN = """
 你是一位負責處理使用者問題的助手，使用者會輸入一個問題，然後上述會有一個文件的內容，\
 你的目標就是去確認這個問題是否可以從這個文件中找到答案。
 你要能判斷問題本身，如：可以介紹這篇文章或是這篇文章有什麼特別的地方等等，這都算是RAGState工具的範疇。
+
 如果文件裡面的內容與使用者問題有關聯，就要使用 RAGState 工具。
-除非是問題完全無法從這個文件中找到答案，否則請使用RAGState工具。
 最後如果文件裡面的內容與使用者問題完全無關，請使用 PlainState 工具。
 """
 
@@ -240,14 +243,14 @@ class AdaptiveRag:
         route_prompt = ChatPromptTemplate.from_messages(
             [
                 ("system", INSTRUCTIONWEB),
-                ("human", "{question}"),
+                ("human", "問題: {question}"),
             ]
         )
         route_prompt_rag_or_plain = ChatPromptTemplate.from_messages(
             [
-                ("system", "文件: \n\n {documents}"),
-                ("human", "{question}"),
                 ("system", INSTRUCTIONRAGORPLAIN),
+                ("system", "文件: \n\n {documents}"),
+                ("human", "問題: {question}"),
             ]
         )
 
@@ -258,7 +261,7 @@ class AdaptiveRag:
         # LLM & chain
         web_chain = prompt_web | self.llm | StrOutputParser()
         # Route LLM with tools use
-        structured_llm_router = self.llm.bind_tools(tools=[WebState])
+        structured_llm_router = self.llm.bind_tools(tools=[WebState, PlainState])
         question_router = route_prompt | structured_llm_router
         # Route LLM with tools use
         structured_rag_plain_router = self.llm.bind_tools(tools=[RAGState, PlainState])
@@ -384,14 +387,22 @@ class AdaptiveRag:
         print("---ROUTE QUESTION---")
         question = state["question"]
         source = self.question_router.invoke({"question": question})
-
+        print(source)
         if len(source.tool_calls) == 0:
             print("  -ROUTE TO PLAIN LLM-")
             return "plain_feedback"
-
-        else:
+        
+        if source.tool_calls[0]["name"] == "WebState":
             print("  -ROUTE TO WEB SEARCH-")
             return "web_search"
+        
+        elif source.tool_calls[0]["name"] == "PlainState":
+            print("  -ROUTE TO PLAIN LLM-")
+            return "plain_feedback"
+
+        # else:
+        #     print("  -ROUTE TO WEB SEARCH-")
+        #     return "web_search"
 
     def route_retrieve(self, state):
         """

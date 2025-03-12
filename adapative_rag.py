@@ -66,11 +66,19 @@ INSTRUCTIONPLAIN = """
 
 # Prompt Template for WEB
 INSTRUCTIONWEB = """
-你是一位負責處理使用者問題的助手，使用者會輸入一個問題，\
-你的目標是要去確認這個問題到底是在跟你聊天還是想要詢問你事情。
+你現在是負責處理使用者問題的助手，負責根據使用者提出的內容進行分類，判斷使用者的意圖是想要與你閒聊，還是需要從網路獲得資訊來回答問題。
 
-如果使用者的問題就是純粹的聊天，則使用PlainState工具(只有聊天才用此工具)
-如果使用者的問題不是純粹的聊天，而是詢問你事情的話，則使用WebState工具
+你有以下兩種工具可以使用：
+
+WebState 工具: 當使用者提出的問題明確是在詢問某種資訊（例如最新消息、資料、事實查核、產品資訊、地點資訊等）並需要從網路中取得最新或準確資訊時使用。
+
+PlainState 工具: 當使用者的內容表現出是想與你進行聊天、閒聊、交流想法或個人意見時使用。
+
+你需要根據以下步驟進行判斷：
+
+步驟一：仔細閱讀使用者的輸入內容。
+步驟二：判斷使用者是想要獲得資訊還是僅想聊天。
+步驟三：根據判斷做出回覆
 """
 
 # Prompt Template for RAG
@@ -81,12 +89,13 @@ INSTRUCTIONWEBRAG = """
 """
 
 INSTRUCTIONRAGORPLAIN = """
-你是一位負責處理使用者問題的助手，使用者會輸入一個問題，然後上述會有一個文件的內容，\
-你的目標就是去確認這個問題是否可以從這個文件中找到答案。
-你要能判斷問題本身，如：可以介紹這篇文章或是這篇文章有什麼特別的地方等等，這都算是RAGState工具的範疇。
+你現在是一個處理使用者問題的，負責根據使用者的問題以及提供的文章內容進行判斷，決定應該使用哪個工具來回答使用者問題。
 
-如果文件裡面的內容與使用者問題有關聯，就要使用 RAGState 工具。
-最後如果文件裡面的內容與使用者問題完全無關，請使用 PlainState 工具。
+你有以下兩種工具可以使用：
+
+RAGState 工具: 當使用者的問題與提供的文章內容直接相關（包含或能從中找到答案、概念解釋或資訊補充）時使用。
+
+PlainState 工具: 當使用者的問題與提供的文章內容無關或無法從中推論出答案時使用。
 """
 
 
@@ -438,7 +447,6 @@ class AdaptiveRag:
         question = state["question"]
         documents = self.web_search_tool.invoke({"query": question})
         documents = [doc["content"] for doc in documents]
-        print(documents)
         # RAG generation
         generation = self.web_chain.invoke(
             {"documents": documents, "question": question}
